@@ -1,0 +1,25 @@
+[tool.black]
+extend-exclude = "(examples|.venv)"
+force-exclude = "examples"
+
+[tool.flake8]
+exclude = [".venv", "examples"]
+max-line-length = 80
+extend-select = ["B950"]
+extend-ignore = ["E203", "E501", "E701"]
+
+[tool.mypy]
+exclude = "examples"
+disallow_untyped_defs = true
+
+[tool.isort]
+profile = "black"
+virtual_env = ".venv"
+skip = ".venv,examples"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+log_cli = false
+log_cli_level = "INFO"
+log_file = "tests/latest-test.log"
+log_file_level = "INFO"
