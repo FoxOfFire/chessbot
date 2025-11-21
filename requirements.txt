@@ -14,3 +14,4 @@ pytest-cov==6.1.0
 
 # chess
 python-chess==1.999
+pygame-ce==2.5.6
