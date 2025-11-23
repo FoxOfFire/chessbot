@@ -6,6 +6,10 @@ import pygame
 
 from bot import Bot
 
+DEPTH = 3
+
+SPR_DIR = Path(".") / "sprites"
+
 
 def loadsprites() -> Tuple[
     Dict[
@@ -18,8 +22,6 @@ def loadsprites() -> Tuple[
     Dict[chess.Color, pygame.Surface],
     int,
 ]:
-
-    SPR_DIR = Path(".") / "sprites"
 
     surfs: Dict[chess.Color, Dict[chess.PieceType, pygame.Surface]] = {}
 
@@ -67,6 +69,8 @@ def drawboard(
 
     pygame.transform.scale(surf, display.size, display)
 
+    pygame.display.flip()
+
 
 def main() -> None:
     pygame.init()
@@ -87,26 +91,39 @@ def main() -> None:
 
         drawboard(board, 600, display)
         bot = Bot()
-        while not board.is_game_over() and run:
+        while (
+            not board.is_checkmate()
+            and not board.is_stalemate()
+            and not board.can_claim_draw()
+            and not board.is_game_over()
+            and run
+        ):
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     run = False
-            board = bot.randombot(board, 2)
-            print(board.move_stack[-1], clock.get_rawtime() / 1000)
+            board, score = bot.randombot(board, DEPTH)
 
             clock.tick(60)
+            print(board.move_stack[-1], score / 1000, clock.get_time() / 1000)
             drawboard(board, 600, display)
-            pygame.display.flip()
 
-        for _ in range(600):
-            clock.tick(60)
-            if not run:
-                break
+        stay = True
+        drawboard(board, 600, display)
+        if stay:
+            while run:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        run = False
+        else:
+            for _ in range(600):
+                clock.tick(60)
+                if not run:
+                    break
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    run = False
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        run = False
 
 
 main()

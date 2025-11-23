@@ -1,5 +1,5 @@
 from random import choice
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import chess
 
@@ -29,56 +29,74 @@ class Bot:
 
         return val
 
-    def prev_mov(self, board: chess.Board) -> List[str]:
-        return [str(s) for s in board.move_stack]
+    def evaluate(self, board: chess.Board) -> int:
+        val = self.getval(board)
+        flipper = 1 if board.turn else -1
+        if board.is_stalemate():
+            return 0
+        elif board.is_checkmate():
+            return -10000000 * flipper
+        elif board.can_claim_draw():
+            return 0
+
+        mod = 0
+        for move in board.legal_moves:
+            mod += self.TRADEMOD if board.is_capture(move) else 0
+            mod += self.CHECKMOD if board.gives_check(move) else 0
+        val += mod * flipper
+
+        return val
 
     def minimax(
         self,
         board: chess.Board,
         depth: int,
+        alpha: int = -10000000,
+        beta: int = 10000000,
+        save_moves: bool = False,
     ) -> Tuple[int, List[chess.Move]]:
-        best: int = -10000000 if board.turn else 10000000
         legal_moves = board.generate_legal_moves()
-        move: List[chess.Move] = []
+        moves: List[chess.Move] = []
+
+        if depth < 1:
+            return self.evaluate(board), moves
+
+        best = 10000000
+        if board.turn:
+            best = -best
 
         for current_move in legal_moves:
-            mod = 0
-            if board.is_capture(current_move):
-                mod += self.TRADEMOD
-            if board.is_into_check(current_move):
-                mod -= self.CHECKMOD * 2
-
             board.push(current_move)
-            if board.is_check():
-                mod += self.CHECKMOD
 
-            if depth < 1:
-                val = self.getval(board)
-            else:
-                val = self.minimax(board, depth - 1)[0]
-
+            val, _ = self.minimax(board, depth - 1, alpha, beta)
             board.pop()
 
-            if board.is_checkmate():
-                return -10000000, [current_move]
-            if board.is_stalemate():
-                return 0, [current_move]
-
-            val *= 1 if board.turn else -1
-            val += mod
-
+            pre_best = best
+            if board.turn:
+                best = max(val, best)
+                alpha = max(val, alpha)
+                if beta <= alpha:
+                    break
+            else:
+                best = min(val, best)
+                beta = min(val, beta)
+                if beta <= alpha:
+                    break
+            if not save_moves:
+                continue
             if best == val:
-                move.append(current_move)
-            elif best < val and board.turn or best > val and not board.turn:
-                move = [current_move]
-                best = val
+                moves.append(current_move)
+            if best != pre_best:
+                moves = [current_move]
 
-            # print(prev_mov(board))
+        return best, moves
 
-        return best, move
+    def randombot(
+        self,
+        board: chess.Board,
+        depth: int,
+    ) -> Tuple[chess.Board, int]:
 
-    def randombot(self, board: chess.Board, depth: int) -> chess.Board:
-
-        moves: List[chess.Move] = self.minimax(board, depth)[1]
+        eval, moves = self.minimax(board, depth, save_moves=True)
         board.push(choice(moves))
-        return board
+        return board, eval
