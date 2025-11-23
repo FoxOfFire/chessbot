@@ -64,8 +64,8 @@ class Bot:
             if board.is_stalemate():
                 return 0, [current_move]
 
-            val += mod
             val *= 1 if board.turn else -1
+            val += mod
 
             if best == val:
                 move.append(current_move)
@@ -77,8 +77,8 @@ class Bot:
 
         return best, move
 
-    def randombot(self, board: chess.Board) -> chess.Board:
+    def randombot(self, board: chess.Board, depth: int) -> chess.Board:
 
-        moves: List[chess.Move] = self.minimax(board, 2)[1]
+        moves: List[chess.Move] = self.minimax(board, depth)[1]
         board.push(choice(moves))
         return board
