@@ -6,7 +6,9 @@ import pygame
 
 from bot import Bot
 
-DEPTH = 3
+DEPTH = 7
+INTERACT = False
+STAY = False
 
 SPR_DIR = Path(".") / "sprites"
 
@@ -26,7 +28,7 @@ def loadsprites() -> Tuple[
     surfs: Dict[chess.Color, Dict[chess.PieceType, pygame.Surface]] = {}
 
     for i in range(len(chess.COLOR_NAMES)):
-        col, colname = (chess.COLORS[i], chess.COLOR_NAMES[i])
+        col, colname = (not chess.COLORS[i], chess.COLOR_NAMES[i])
         p_dict: Dict[chess.PieceType, pygame.Surface] = {}
 
         for name in chess.PIECE_TYPES:
@@ -58,7 +60,7 @@ def drawboard(
     surf = pygame.Surface((size * 8, size * 8))
     for pos in chess.SQUARES:
         piece = board.piece_at(pos)
-        x, y = (pos % 8, pos // 8)
+        x, y = (pos % 8, 7 - pos // 8)
 
         surf.blit(backs[(x + y) % 2 == 0], (x * size, y * size))
 
@@ -70,6 +72,15 @@ def drawboard(
     pygame.transform.scale(surf, display.size, display)
 
     pygame.display.flip()
+
+
+def p_move_gen(move: str) -> chess.Move:
+    from_str = move[0:2]
+    to_str = move[2:4]
+    pars = chess.parse_square
+    ret_move = chess.Move(pars(from_str), pars(to_str))
+
+    return ret_move
 
 
 def main() -> None:
@@ -87,7 +98,9 @@ def main() -> None:
 
     run = True
     while run:
-        board = chess.Board()
+        board = chess.Board(
+            fen="3k2QR/p5P1/3p2N1/pPn1p3/5r2/1b4P1/2n4P/b1K5 b - - 2 25"
+        )
 
         drawboard(board, 600, display)
         bot = Bot()
@@ -98,23 +111,26 @@ def main() -> None:
             and not board.is_game_over()
             and run
         ):
-
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     run = False
-            board, score = bot.randombot(board, DEPTH)
 
-            clock.tick(60)
-            print(board.move_stack[-1], score / 1000, clock.get_time() / 1000)
+            if board.turn and INTERACT:
+                p_move = p_move_gen("a1a1")
+                while p_move not in board.generate_legal_moves():
+                    p_move = p_move_gen(input("input a move"))
+
+                board.push(p_move)
+                clock.tick(60)
+            else:
+                board, score = bot.randombot(board, DEPTH)
+                clock.tick(2)
+                print(board.move_stack[-1], score / 1000, clock.get_time() / 1000)
             drawboard(board, 600, display)
 
-        stay = True
-        drawboard(board, 600, display)
-        if stay:
-            while run:
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        run = False
+        drawboard(board, 800, display)
+        if STAY:
+            input(("black" if board.turn else "white") + " won")
         else:
             for _ in range(600):
                 clock.tick(60)

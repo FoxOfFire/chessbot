@@ -1,0 +1,184 @@
+from random import choice
+from typing import Dict, Iterator, List, Tuple
+
+import chess
+
+pieceVals: Dict[chess.PieceType, int] = {
+    chess.PAWN: 1000,
+    chess.KNIGHT: 3000,
+    chess.BISHOP: 3100,
+    chess.ROOK: 5000,
+    chess.QUEEN: 9000,
+    chess.KING: 10000000,
+}
+CHECKMOD = 500
+TRADEMOD = 200
+
+MAX_EVAL = 100000000
+MIN_EVAL = -100000000
+
+
+class Bot:
+    def getval(self, board: chess.Board) -> int:
+
+        val: int = 0
+        for i in chess.SQUARES:
+            piece = board.piece_at(i)
+            if piece is None:
+                continue
+            frend = 1 if piece.color else -1
+            val += frend * pieceVals[piece.piece_type]
+
+        return val
+
+    def evaluate(self, board: chess.Board) -> int:
+        val = self.getval(board)
+        flipper = 1 if board.turn else -1
+        if board.is_stalemate():
+            return 0
+        elif board.is_checkmate():
+            return MIN_EVAL * flipper
+        elif board.can_claim_draw():
+            return 0
+
+        mod = 0
+        for move in board.legal_moves:
+            mod += TRADEMOD if board.is_capture(move) else 0
+            mod += CHECKMOD if board.gives_check(move) else 0
+        val += mod * flipper
+
+        return val
+
+    def minimax_2(
+        self,
+        board: chess.Board,
+        depth: int,
+        prev_moves: List[Tuple[chess.Move, int]],
+    ) -> List[Tuple[chess.Move, int]]:
+        moves: List[Tuple[chess.Move, int]] = []
+
+        move_stack: List[List[chess.Move]]
+        def_abo = lambda board: (
+            MIN_EVAL,
+            MAX_EVAL,
+            MIN_EVAL if board.turn else MAX_EVAL,
+        )
+        abo_stack: List[Tuple[int, int, int]] = [def_abo(board), def_abo(board)]
+
+        for current_move, _ in prev_moves:
+            move_stack = [list(board.generate_legal_moves())]
+            while len(move_stack) > 0:
+                print([len(moves) for moves in move_stack], abo_stack)
+                if len(move_stack[-1]) == 0:
+                    if len(move_stack) == 1:
+                        break
+                    print("node fihhished")
+                    while True:
+                        board.pop()
+                        move_stack.pop()
+                        _, _, o = abo_stack.pop()
+                        if len(move_stack) == 0:
+                            break
+                        a, b, best = abo_stack[-1]
+
+                        if board.turn:
+                            best = max(best, o)
+                            a = max(a, o)
+                        else:
+                            best = min(best, o)
+                            b = min(a, o)
+
+                        abo_stack[-1] = (a, b, best)
+
+                        if b > a:
+                            break
+
+                elif len(move_stack) <= depth + 1:
+                    print("node added")
+                    board.push(move_stack[-1].pop())
+                    move_stack.append(list(board.generate_legal_moves()))
+                    abo_stack.append(def_abo(board))
+                    continue
+                else:
+                    print("leaf removed")
+                    board.push(move_stack[-1].pop())
+                    eval = self.evaluate(board)
+                    board.pop()
+                    a, b, o = abo_stack[-1]
+                    abo_stack[-1] = (a, b, max(eval, o) if board.turn else min(eval, o))
+
+        moves.sort(key=lambda move: move[1], reverse=board.turn)
+        return moves
+
+    def minimax(
+        self,
+        board: chess.Board,
+        depth: int,
+        alpha: int = MIN_EVAL,
+        beta: int = MAX_EVAL,
+        prev_moves: List[Tuple[chess.Move, int]] = [],
+    ) -> int | List[Tuple[chess.Move, int]]:
+        if depth < 1:
+            return self.evaluate(board)
+
+        save_moves = len(prev_moves) != 0
+        best = MIN_EVAL if board.turn else MAX_EVAL
+
+        legal_moves: Iterator[chess.Move] | List[chess.Move]
+        if save_moves:
+            legal_moves = [move for (move, _) in prev_moves]
+            moves: List[Tuple[chess.Move, int]] = []
+        else:
+            legal_moves = board.generate_legal_moves()
+
+        for current_move in legal_moves:
+            board.push(current_move)
+            val = self.minimax(board, depth - 1, alpha, beta)
+            assert isinstance(val, int)
+            board.pop()
+
+            if board.turn:
+                best = max(val, best)
+                alpha = max(val, alpha)
+            else:
+                best = min(val, best)
+                beta = min(val, beta)
+
+            if save_moves:
+                moves.append((current_move, val))
+
+            if beta <= alpha:
+                break
+
+        if save_moves:
+            moves.sort(key=lambda move: move[1], reverse=board.turn)
+            return moves
+
+        return best
+
+    def randombot(
+        self,
+        board: chess.Board,
+        depth: int,
+    ) -> Tuple[chess.Board, int]:
+
+        moves: List[Tuple[chess.Move, int]] = [
+            (move, 0) for move in board.generate_legal_moves()
+        ]
+        for i in range(depth):
+            res = self.minimax_2(
+                board,
+                i,
+                prev_moves=moves,
+            )
+            assert type(res) is list
+            moves = res
+            print(
+                "depth:",
+                i + 1,
+                "white" if board.turn else "black",
+                [m[1] for m in moves],
+            )
+        best_moves = [move for (move, eval) in moves if eval == moves[0][1]]
+        board.push(choice(best_moves))
+        return board, moves[0][1]
