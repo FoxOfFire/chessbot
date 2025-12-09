@@ -1,7 +1,7 @@
 from functools import reduce
 from itertools import chain
 from random import choice
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterator, List, Tuple
 
 import chess
 
@@ -176,109 +176,103 @@ class Bot:
         return best
 
     def sort_moves(
-        self, moves: Dict[chess.Move, int], board: chess.Board
+        self, moves: Dict[chess.Move, int], turn: chess.Color
     ) -> Dict[chess.Move, int]:
         return dict(
             sorted(
                 moves.items(),
                 key=lambda x: x[1],
-                reverse=board.turn,
+                reverse=turn,
             )
         )
 
     def dict_stringify(self, d: Dict[Any, Any]) -> List[str]:
         return [(str(m[0]) + " " + str(m[1] / 1000)) for m in d.items()]
 
-    def minimax(
-        self,
-        board: chess.Board,
-        depth: int,
-        alpha: int = MIN_EVAL,
-        beta: int = MAX_EVAL,
-        prev_moves: Dict[chess.Move, int] = {},
-        ab_prune: bool = True,
-    ) -> Dict[chess.Move, int] | Tuple[int, int, int]:
-        if depth < 0 or board.is_game_over(claim_draw=True):
-            return self.evaluate(board), 1, 0
-
-        save_moves = len(prev_moves) != 0
-        best = WORST = MIN_EVAL if board.turn else MAX_EVAL
+    def mitermax(
+        self, board: chess.Board, depth: int, prev_moves: Dict[chess.Move, int]
+    ) -> Dict[chess.Move, int]:
         accu = 0
-        cut = 0
+        breaks = 0
+        for move in prev_moves:
 
-        legal_moves: Dict[chess.Move, int]
+            board.push(move)
 
-        if save_moves:
-            legal_moves = prev_moves
-            mov_cnt = len(list(board.generate_legal_moves()))
-            i = 0
-            assert len(legal_moves) == mov_cnt
-        else:
-            legal_moves = dict.fromkeys(
-                list(
-                    chain(
+            alphas = [MIN_EVAL for _ in range(depth)]
+            betas = [MAX_EVAL for _ in range(depth)]
+            evals = [0 for i in range(depth + 1)]
+            cdep = 0
+
+            legal_moves = board.generate_legal_moves()
+            moves = [legal_moves for _ in range(depth)]
+            if depth == 0:
+                prev_moves[move] = self.evaluate(board)
+                board.pop()
+                continue
+
+            while cdep >= 0:
+
+                try:
+                    next = moves[cdep].__next__()
+                    board.push(next)
+
+                    cdep += 1
+                    if cdep == depth:
+                        evals[cdep] = self.evaluate(board)
+                        accu += 1
+                        raise StopIteration
+
+                    moves[cdep] = chain(
                         board.generate_castling_moves(),
                         board.generate_legal_captures(),
                         board.generate_legal_moves(),
                     )
-                ),
-                WORST,
-            )
 
-        for current_move in legal_moves:
-            board.push(current_move)
-            res = self.minimax(
-                board,
-                depth - 1,
-                alpha,
-                beta,
-                ab_prune=ab_prune,
-            )
-            assert isinstance(res, tuple)
-            val, sum, cuts = res
-            accu += sum
-            cut += cuts
-            board.pop()
+                    evals[cdep] = MIN_EVAL if board.turn else MAX_EVAL
+                    betas[cdep] = betas[cdep - 1]
+                    alphas[cdep] = alphas[cdep - 1]
 
-            if board.turn:
-                best = max(val, best)
-                alpha = max(val, alpha)
+                except StopIteration:
+                    breaks -= 1
+                    while True:
+                        cdep -= 1
+                        breaks += 1
+                        board.pop()
+                        val = evals[cdep + 1]
 
-            else:
-                best = min(val, best)
-                beta = min(val, beta)
+                        if board.turn:
+                            evals[cdep] = max(val, evals[cdep])
+                            alphas[cdep] = max(val, alphas[cdep])
 
-            if save_moves:
-                legal_moves.update({current_move: val})
-                i += 1
-            if beta <= alpha and ab_prune:
-                cut += 1
-                break
+                        else:
+                            evals[cdep] = min(val, evals[cdep])
+                            betas[cdep] = min(val, betas[cdep])
 
-        if save_moves:
-            legal_moves = self.sort_moves(legal_moves, board)
-            print("checked:", accu, "cut:", cut)
-            return legal_moves
-        return best, accu, cut
+                        if betas[cdep] > alphas[cdep] or cdep < 0:
+                            break
+
+            prev_moves[move] = evals[0]
+        print("checked:", accu, "cut:", breaks)
+        return self.sort_moves(prev_moves, board.turn)
 
     def randombot(
         self,
         board: chess.Board,
         depth: int,
     ) -> Tuple[chess.Move, int]:
-        print("Recurbot")
+        print("Iterbot")
 
         WORST = MIN_EVAL if board.turn else MAX_EVAL
         moves = dict.fromkeys(board.generate_legal_moves(), WORST)
         assert len(moves) > 0
-        for i in range(1, depth + 1):
-            res = self.minimax(board, i, prev_moves=moves)
+        for i in range(depth):
+            res = self.mitermax(board, i, moves)
             assert type(res) is dict
             assert len(res) > 0
 
             moves = res
-            print("depth:", i, self.dict_stringify(moves)[0])
             val = list(moves.values())[0]
+            print("depth:", i + 1, self.dict_stringify(moves)[0])
             if val == MAX_EVAL or val == MIN_EVAL:
                 break
         mm = max if board.turn else min
